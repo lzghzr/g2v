@@ -1,0 +1,146 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbound": {
+    "port": 1080,
+    "listen": "0.0.0.0",
+    "protocol": "socks",
+    "settings": {
+      "auth": "noauth",
+      "udp": true,
+      "ip": "0.0.0.0",
+      "userLevel": 0
+    },
+    "tag": "socks",
+    "domainOverride": [
+      "tls",
+      "http"
+    ]
+  },
+  "outbound": {
+    "protocol": "freedom",
+    "settings": {},
+    "tag": "direct"
+  },
+  "inboundDetour": [
+    {
+      "port": 1081,
+      "listen": "0.0.0.0",
+      "protocol": "http",
+      "settings": {
+        "allowTransparent": false,
+        "userLevel": 0
+      },
+      "tag": "http",
+      "domainOverride": [
+        "tls",
+        "http"
+      ]
+    },
+    {
+      "port": 1082,
+      "listen": "0.0.0.0",
+      "protocol": "dokodemo-door",
+      "settings": {
+        "network": "tcp,udp",
+        "followRedirect": true,
+        "userLevel": 0
+      },
+      "tag": "dokodemo",
+      "domainOverride": [
+        "tls",
+        "http"
+      ]
+    }
+  ],
+  "outboundDetour": [
+    {
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "xxx.xxx.xxx.xxx",
+            "port": 443,
+            "users": []
+          }
+        ]
+      },
+      "tag": "proxy",
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "xxx.xxx.xxx",
+          "allowInsecure": false
+        },
+        "wsSettings": {
+          "path": "/xxxxxxxxxxxxxxxx/"
+        }
+      },
+      "mux": {
+        "enabled": true,
+        "concurrency": 8
+      }
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "handshake": 10,
+        "connIdle": 300,
+        "uplinkOnly": 0,
+        "downlinkOnly": 0,
+        "bufferSize": 0
+      }
+    }
+  },
+  "routing": {
+    "strategy": "rules",
+    "settings": {
+      "rules": [
+        {
+          "type": "field",
+          "inboundTag": [
+            "socks",
+            "http"
+          ],
+          "outboundTag": "proxy"
+        },
+        {
+          "type": "field",
+          "domain": [
+            "ext:gfwlist:direct"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "type": "field",
+          "domain": [
+            "ext:gfwlist:proxy"
+          ],
+          "outboundTag": "proxy"
+        },
+        {
+          "type": "field",
+          "ip": [
+            "8.8.4.4",
+            "8.8.8.8",
+            "67.198.55.0/24",
+            "91.108.4.0/22",
+            "91.108.8.0/22",
+            "91.108.12.0/22",
+            "91.108.16.0/22",
+            "91.108.56.0/22",
+            "109.239.140.0/24",
+            "149.154.160.0/20",
+            "149.154.164.0/22",
+            "149.154.168.0/22",
+            "149.154.172.0/22"
+          ],
+          "outboundTag": "proxy"
+        }
+      ]
+    }
+  }
+}

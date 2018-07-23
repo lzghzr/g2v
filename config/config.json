@@ -1,0 +1,58 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbound": {
+    "port": 22222,
+    "listen": "127.0.0.1",
+    "protocol": "socks",
+    "settings": {
+      "auth": "noauth",
+      "udp": true,
+      "ip": "127.0.0.1",
+      "userLevel": 0
+    },
+    "streamSettings": {
+      "network": "ws",
+      "wsSettings": {
+        "path": "/xxxxxxxxxxxxxxxx/"
+      }
+    }
+  },
+  "outbound": {
+    "protocol": "freedom",
+    "settings": {}
+  },
+  "outboundDetour": [
+    {
+      "protocol": "blackhole",
+      "settings": {},
+      "tag": "blocked"
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "handshake": 10,
+        "connIdle": 300,
+        "uplinkOnly": 0,
+        "downlinkOnly": 0,
+        "bufferSize": 0
+      }
+    }
+  },
+  "routing": {
+    "strategy": "rules",
+    "settings": {
+      "rules": [
+        {
+          "type": "field",
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "block"
+        }
+      ]
+    }
+  }
+}

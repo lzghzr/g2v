@@ -8,13 +8,13 @@ request.get(gfwlistUrl, (error, response) => {
   if (error !== null) return console.error(error)
   // 解码
   const gfwlist = Buffer.from(response.body, 'base64').toString()
-  fs.writeFile('./build/gfwlist.txt', gfwlist, error => { if (error !== null) console.log(error) })
+  fs.writeFile(__dirname + '/gfwlist.txt', gfwlist, error => { if (error !== null) console.log(error) })
   // 格式化
   const gfwlist2v = parseGFWListRules(gfwlist)
   // 写入json
   const rules = Object.keys(gfwlist2v)
     .map(key => ({ type: 'field', domain: gfwlist2v[key].map(domain => parseDomain2json(domain)), 'outboundTag': key }))
-  fs.writeFile('./build/gfwlist.json', JSON.stringify(rules), error => { if (error !== null) console.log(error) })
+  fs.writeFile(__dirname + '/gfwlist.json', JSON.stringify(rules), error => { if (error !== null) console.log(error) })
   // 写入pb
   protobuf.load('./router.proto').then(protoRoot => {
     const GeoSiteList = protoRoot.lookupType('router.GeoSiteList')
@@ -23,7 +23,7 @@ request.get(gfwlistUrl, (error, response) => {
         .map(key => ({ countryCode: key.toUpperCase(), domain: gfwlist2v[key].map(domain => parseDomain2pb(domain)) }))
     })
     const buffer = GeoSiteList.encode(siteList).finish()
-    fs.writeFile('./build/gfwlist', buffer, error => { if (error !== null) console.log(error) })
+    fs.writeFile(__dirname + '/gfwlist', buffer, error => { if (error !== null) console.log(error) })
   })
 })
 /**

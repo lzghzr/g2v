@@ -1,0 +1,116 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbound": {
+    "port": 1080,
+    "listen": "127.0.0.1",
+    "protocol": "socks",
+    "settings": {
+      "auth": "noauth",
+      "udp": true,
+      "ip": "127.0.0.1",
+      "userLevel": 0
+    },
+    "domainOverride": [
+      "tls",
+      "http"
+    ]
+  },
+  "outbound": {
+    "protocol": "freedom",
+    "settings": {},
+    "tag": "direct"
+  },
+  "outboundDetour": [
+    {
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "xxx.xxx.xxx.xxx",
+            "port": 443,
+            "users": []
+          }
+        ]
+      },
+      "tag": "proxy",
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "xxx.xxx.xxx",
+          "allowInsecure": false
+        },
+        "wsSettings": {
+          "path": "/xxxxxxxxxxxxxxxx/"
+        }
+      },
+      "mux": {
+        "enabled": true,
+        "concurrency": 8
+      }
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "handshake": 10,
+        "connIdle": 300,
+        "uplinkOnly": 0,
+        "downlinkOnly": 0,
+        "bufferSize": 0
+      }
+    }
+  },
+  "routing": {
+    "strategy": "rules",
+    "settings": {
+      "rules": [
+        {
+          "type": "field",
+          "domain": [
+            "regexp:^share\\.dmhy\\.org",
+            "regexp:^blog\\.ontrac\\.com",
+            "regexp:^store\\.sprite\\.org",
+            "regexp:^xx\\.wwwhost\\.biz",
+            "domain:v6.facebook.com",
+            "..."
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "type": "field",
+          "domain": [
+            "domain:agnesb.fr",
+            "domain:akiba-web.com",
+            "domain:altrec.com",
+            "domain:apartmentratings.com",
+            "domain:apartments.com",
+            "..."
+          ],
+          "outboundTag": "proxy"
+        },
+        {
+          "type": "field",
+          "ip": [
+            "8.8.4.4",
+            "8.8.8.8",
+            "67.198.55.0/24",
+            "91.108.4.0/22",
+            "91.108.8.0/22",
+            "91.108.12.0/22",
+            "91.108.16.0/22",
+            "91.108.56.0/22",
+            "109.239.140.0/24",
+            "149.154.160.0/20",
+            "149.154.164.0/22",
+            "149.154.168.0/22",
+            "149.154.172.0/22"
+          ],
+          "outboundTag": "proxy"
+        }
+      ]
+    }
+  }
+}
