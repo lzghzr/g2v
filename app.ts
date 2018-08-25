@@ -50,12 +50,12 @@ function parseGFWListRules(gfwlist: string): { [index: string]: v2Rule[] } {
   const direct: v2Rule[] = []
   const proxy: v2Rule[] = []
   const lines = gfwlist.split('\n')
-  // 补充内容, 非域名, 无法实现
-  let supplemental = false
+  let skip = false
   lines.forEach(line => {
-    if (line.includes('Supplemental List Start')) supplemental = true
-    else if (line.includes('Supplemental List End')) supplemental = false
+    if (line.includes('Supplemental List Start') || line.includes('Whitelist Start')) skip = true
+    else if (line.includes('Supplemental List End') || line.includes('Whitelist End')) skip = false
     if (line === '' || line.startsWith('!') || line.startsWith('[')) return
+    if (skip) return console.log('skip', line)
     // 域名及其子域
     if (line.startsWith('||')) {
       line = getDomain(line.substr(2))
@@ -84,12 +84,10 @@ function parseGFWListRules(gfwlist: string): { [index: string]: v2Rule[] } {
       // 正则太少, 暂不实现
       console.log('regex', line)
     }
-    else if (!supplemental) {
+    else {
       line = getDomain(line)
       if (line !== '' && !proxy.find(rule => rule.value === line)) proxy.push({ type: v2Type.plain, value: line })
     }
-    // 关键字匹配, 无法使用域名实现
-    else console.log('other', line)
   })
   return { direct, proxy }
 }
