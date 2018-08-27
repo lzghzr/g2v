@@ -34,7 +34,8 @@ request.get(gfwlistUrl, (error, response) => {
 enum v2Type {
   'plain',
   'regex',
-  'domain'
+  'domain',
+  'full'
 }
 interface v2Rule {
   type: number
@@ -64,7 +65,7 @@ function parseGFWListRules(gfwlist: string): { [index: string]: v2Rule[] } {
     // 不匹配子域
     else if (line.startsWith('|')) {
       line = getDomain(line.substr(1))
-      if (line !== '' && !proxy.find(rule => rule.value === line)) proxy.push({ type: v2Type.regex, value: line })
+      if (line !== '' && !proxy.find(rule => rule.value === line)) proxy.push({ type: v2Type.full, value: line })
     }
     // 白名单
     else if (line.startsWith('@@')) {
@@ -77,7 +78,7 @@ function parseGFWListRules(gfwlist: string): { [index: string]: v2Rule[] } {
       // 不匹配子域
       else if (line.startsWith('|')) {
         line = getDomain(line.substr(1))
-        if (line !== '' && !direct.find(rule => rule.value === line)) direct.push({ type: v2Type.regex, value: line })
+        if (line !== '' && !direct.find(rule => rule.value === line)) direct.push({ type: v2Type.full, value: line })
       }
     }
     else if (line.startsWith('/')) {
@@ -127,9 +128,9 @@ function getDomain(url: string) {
  * @returns {string}
  */
 function parseDomain2json(domain: v2Rule): string {
-  if (domain.type === v2Type.regex) domain.value = 'regexp:^' + domain.value.replace(/\./g, '\\.').replace(/\*/g, '\\S*')
-  else if (domain.value.includes('*')) domain.value = 'regexp:' + domain.value.replace(/\./g, '\\.').replace(/\*/g, '.*')
+  if (domain.value.includes('*')) domain.value = 'regexp:' + domain.value.replace(/\./g, '\\.').replace(/\*/g, '.*')
   else if (domain.type === v2Type.domain) domain.value = 'domain:' + domain.value
+  else if (domain.type === v2Type.full) domain.value = 'full:' + domain.value
   return domain.value
 }
 /**
@@ -139,8 +140,7 @@ function parseDomain2json(domain: v2Rule): string {
  * @returns {v2Rule}
  */
 function parseDomain2pb(domain: v2Rule): v2Rule {
-  if (domain.type === v2Type.regex) domain.value = '^' + domain.value.replace(/\./g, '\\.').replace(/\*/g, '\\S*')
-  else if (domain.value.includes('*')) {
+  if (domain.value.includes('*')) {
     domain.type = v2Type.regex
     domain.value = domain.value.replace(/\./g, '\\.').replace(/\*/g, '.*')
   }
