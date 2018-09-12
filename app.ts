@@ -13,14 +13,14 @@ request.get(gfwlistUrl, (error, response) => {
   const gfwlist2v = parseGFWListRules(gfwlist)
   // 写入json
   const rules = Object.keys(gfwlist2v)
-    .map(key => ({ type: 'field', domain: gfwlist2v[key].map(domain => parseDomain2json(domain)), 'outboundTag': key }))
-  fs.writeFile(__dirname + '/gfwlist.json', JSON.stringify(rules), error => { if (error !== null) console.log(error) })
+    .map(key => ({ type: 'field', domain: parseDomain2json(gfwlist2v[key]), 'outboundTag': key }))
+  fs.writeFile(__dirname + '/gfwlist.json', JSON.stringify(rules, (_key, value) => value, 2), error => { if (error !== null) console.log(error) })
   // 写入pb
   protobuf.load('./router.proto').then(protoRoot => {
     const GeoSiteList = protoRoot.lookupType('router.GeoSiteList')
     const siteList = GeoSiteList.create({
       entry: Object.keys(gfwlist2v)
-        .map(key => ({ countryCode: key.toUpperCase(), domain: gfwlist2v[key].map(domain => parseDomain2pb(domain)) }))
+        .map(key => ({ countryCode: key.toUpperCase(), domain: parseDomain2pb(gfwlist2v[key]) }))
     })
     const buffer = GeoSiteList.encode(siteList).finish()
     fs.writeFile(__dirname + '/gfwlist', buffer, error => { if (error !== null) console.log(error) })
@@ -33,11 +33,14 @@ request.get(gfwlistUrl, (error, response) => {
  */
 enum v2Type {
   'plain',
-  'regex',
+  'regexp',
   'domain',
   'full'
 }
 interface v2Rule {
+  [index: number]: Set<string>
+}
+interface v2RulePB {
   type: number
   value: string
 }
@@ -45,11 +48,21 @@ interface v2Rule {
  * 格式化GFWList
  *
  * @param {string} gfwlist
- * @returns {{ [index: string]: string[] }}
+ * @returns {{ [index: string]: v2Rule }}
  */
-function parseGFWListRules(gfwlist: string): { [index: string]: v2Rule[] } {
-  const direct: v2Rule[] = []
-  const proxy: v2Rule[] = []
+function parseGFWListRules(gfwlist: string): { [index: string]: v2Rule } {
+  const direct: v2Rule = {
+    [v2Type.full]: new Set(),
+    [v2Type.domain]: new Set(),
+    [v2Type.regexp]: new Set(),
+    [v2Type.plain]: new Set()
+  }
+  const proxy: v2Rule = {
+    [v2Type.full]: new Set(),
+    [v2Type.domain]: new Set(),
+    [v2Type.regexp]: new Set(),
+    [v2Type.plain]: new Set()
+  }
   const lines = gfwlist.split('\n')
   let skip = false
   lines.forEach(line => {
@@ -60,12 +73,12 @@ function parseGFWListRules(gfwlist: string): { [index: string]: v2Rule[] } {
     // 域名及其子域
     if (line.startsWith('||')) {
       line = getDomain(line.substr(2))
-      if (line !== '' && !proxy.find(rule => rule.value === line)) proxy.push({ type: v2Type.domain, value: line })
+      if (line !== '') domainAdd(line, proxy)
     }
     // 不匹配子域
     else if (line.startsWith('|')) {
       line = getDomain(line.substr(1))
-      if (line !== '' && !proxy.find(rule => rule.value === line)) proxy.push({ type: v2Type.full, value: line })
+      if (line !== '') fullAdd(line, proxy)
     }
     // 白名单
     else if (line.startsWith('@@')) {
@@ -73,12 +86,20 @@ function parseGFWListRules(gfwlist: string): { [index: string]: v2Rule[] } {
       // 域名及其子域
       if (line.startsWith('||')) {
         line = getDomain(line.substr(2))
-        if (line !== '' && !direct.find(rule => rule.value === line)) direct.push({ type: v2Type.domain, value: line })
+        if (line !== '') domainAdd(line, direct)
       }
       // 不匹配子域
       else if (line.startsWith('|')) {
         line = getDomain(line.substr(1))
-        if (line !== '' && !direct.find(rule => rule.value === line)) direct.push({ type: v2Type.full, value: line })
+        if (line !== '') fullAdd(line, direct)
+      }
+      else if (line.startsWith('/')) {
+        // 正则太少, 暂不实现
+        console.log('regex', line)
+      }
+      else {
+        line = getDomain(line)
+        if (line !== '') plainAdd(line, direct)
       }
     }
     else if (line.startsWith('/')) {
@@ -87,7 +108,7 @@ function parseGFWListRules(gfwlist: string): { [index: string]: v2Rule[] } {
     }
     else {
       line = getDomain(line)
-      if (line !== '' && !proxy.find(rule => rule.value === line)) proxy.push({ type: v2Type.plain, value: line })
+      if (line !== '') plainAdd(line, proxy)
     }
   })
   return { direct, proxy }
@@ -122,27 +143,90 @@ function getDomain(url: string) {
   return url
 }
 /**
+ * 添加domain规则
+ *
+ * @param {string} line
+ * @param {v2Rule} rule
+ */
+function domainAdd(line: string, rule: v2Rule) {
+  if (line.includes('*')) {
+    const lineMatch = line.match(/\*.*?\.(.+)/)
+    if (lineMatch === null) return console.log('unknow', line)
+    if (!rule[v2Type.domain].has(lineMatch[1])) {
+      line = line.replace(/\./g, '\\.').replace(/\*/g, '[^\\.]+') + '$'
+      rule[v2Type.regexp].add(line)
+    }
+  }
+  else {
+    if (rule[v2Type.full].has(line)) rule[v2Type.full].delete(line)
+    rule[v2Type.domain].add(line)
+  }
+}
+/**
+ * 添加full规则
+ *
+ * @param {string} line
+ * @param {v2Rule} rule
+ */
+function fullAdd(line: string, rule: v2Rule) {
+  if (line.includes('*')) {
+    const lineMatch = line.match(/\*.*?\.(.+)/)
+    if (lineMatch === null) return console.log('unknow', line)
+    if (!rule[v2Type.domain].has(lineMatch[1])) {
+      // 目前v2ray并不支持这种表达式
+      // line = '(?<!\\.)' + line.replace(/\./g, '\\.').replace(/\*/g, '[^\\.]+') + '$'
+      line = line.replace(/\./g, '\\.').replace(/\*/g, '[^\\.]+') + '$'
+      rule[v2Type.regexp].add(line)
+    }
+  }
+  else if (!rule[v2Type.domain].has(line)) rule[v2Type.full].add(line)
+}
+/**
+ * 添加plain规则
+ *
+ * @param {string} line
+ * @param {v2Rule} rule
+ */
+function plainAdd(line: string, rule: v2Rule) {
+  if (line.includes('*')) {
+    const lineMatch = line.match(/\*.*?\.(.+)/)
+    if (lineMatch === null) return console.log('unknow', line)
+    if (!rule[v2Type.domain].has(lineMatch[1])) {
+      // 目前v2ray并不支持这种表达式
+      // line = '(?<!\\.)' + line.replace(/\./g, '\\.').replace(/\*/g, '[^\\.]+') + '$'
+      line = line.replace(/\./g, '\\.').replace(/\*/g, '[^\\.]+') + '$'
+      rule[v2Type.regexp].add(line)
+    }
+  }
+  else {
+    if (line.startsWith('.')) line = line.substr(1)
+    if (rule[v2Type.full].has(line)) rule[v2Type.full].delete(line)
+    rule[v2Type.domain].add(line)
+  }
+}
+/**
  * 格式化域名, json
  *
- * @param {v2Rule} domain
- * @returns {string}
+ * @param {v2Rule} rule
+ * @returns {string[]}
  */
-function parseDomain2json(domain: v2Rule): string {
-  if (domain.value.includes('*')) domain.value = 'regexp:' + domain.value.replace(/\./g, '\\.').replace(/\*/g, '.*')
-  else if (domain.type === v2Type.domain) domain.value = 'domain:' + domain.value
-  else if (domain.type === v2Type.full) domain.value = 'full:' + domain.value
-  return domain.value
+function parseDomain2json(rule: v2Rule): string[] {
+  const domainList: string[] = []
+  rule[v2Type.domain].forEach(domain => domainList.push('domain:' + domain))
+  rule[v2Type.full].forEach(domain => domainList.push('full:' + domain))
+  rule[v2Type.regexp].forEach(domain => domainList.push('regexp:' + domain))
+  return domainList
 }
 /**
  * 格式化域名, pb
  *
- * @param {string} domain
- * @returns {v2Rule}
+ * @param {string} rule
+ * @returns {v2RulePB[]}
  */
-function parseDomain2pb(domain: v2Rule): v2Rule {
-  if (domain.value.includes('*')) {
-    domain.type = v2Type.regex
-    domain.value = domain.value.replace(/\./g, '\\.').replace(/\*/g, '.*')
-  }
-  return domain
+function parseDomain2pb(rule: v2Rule): v2RulePB[] {
+  const domainList: v2RulePB[] = []
+  rule[v2Type.domain].forEach(domain => domainList.push({ type: v2Type.domain, value: domain }))
+  rule[v2Type.full].forEach(domain => domainList.push({ type: v2Type.full, value: domain }))
+  rule[v2Type.regexp].forEach(domain => domainList.push({ type: v2Type.regexp, value: domain }))
+  return domainList
 }
